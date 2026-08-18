@@ -1207,15 +1207,25 @@ function bind(){
  $('#avatar').onclick=()=>{switchTab('settings');switchSub('settings','profile')};
  /* 刷新按钮：单击刷新页面，长按清除缓存强制刷新 */
  (function(){
-   let pressTimer=null;
+   let pressTimer=null,pressed=false;
    const btn=$('#refreshBtn');
    if(!btn)return;
-   btn.addEventListener('touchstart',()=>{pressTimer=setTimeout(()=>{if(navigator.serviceWorker&&navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({action:'clearCache'})}if('caches'in window){caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)))}setTimeout(()=>location.reload(true),300);toast('已清除缓存，正在刷新...')},800)});
-   btn.addEventListener('touchend',()=>{clearTimeout(pressTimer)});
-   btn.addEventListener('mousedown',()=>{pressTimer=setTimeout(()=>{if(navigator.serviceWorker&&navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({action:'clearCache'})}if('caches'in window){caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)))}setTimeout(()=>location.reload(true),300);toast('已清除缓存，正在刷新...')},800)});
-   btn.addEventListener('mouseup',()=>{clearTimeout(pressTimer)});
-   btn.addEventListener('mouseleave',()=>{clearTimeout(pressTimer)});
-   btn.addEventListener('click',()=>{location.reload()});
+   btn.addEventListener('touchstart',function(e){
+     pressed=false;
+     pressTimer=setTimeout(function(){
+       pressed=true;
+       if('caches'in window){caches.keys().then(function(keys){keys.forEach(function(k){caches.delete(k)})})}
+       if(navigator.serviceWorker&&navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({action:'clearCache'})}
+       toast('已清除缓存，正在刷新...');
+       setTimeout(function(){location.reload()},500);
+     },800);
+   });
+   btn.addEventListener('touchend',function(){clearTimeout(pressTimer);if(!pressed){location.reload()}});
+   btn.addEventListener('touchcancel',function(){clearTimeout(pressTimer)});
+   btn.addEventListener('click',function(e){
+     if(e.detail===0)return; /* 忽略键盘触发 */
+     if(!pressed){location.reload()}
+   });
  })();
  $('#profileName').onchange=e=>{st.profile.name=e.target.value;save();renderTop();toast('名字已保存')};
  $('#avatarFile').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{st.profile.avatar=r.result;save();renderAvatar();toast('头像已更新')};r.readAsDataURL(f)};
