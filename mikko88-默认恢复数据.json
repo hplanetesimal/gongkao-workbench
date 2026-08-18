@@ -1,0 +1,41 @@
+{
+  "profile": {"name": "律师", "avatar": ""},
+  "examDate": "2027-03-01",
+  "dailyMin": 2,
+  "dailyTarget": 4,
+  "cloudApi": "",
+  "modules": [
+    {"id": "module-zl", "name": "资料分析", "teacher": "花生十三", "course": "2027系统班资料分析", "hours": 50, "done": 0, "baidu": "", "mn": "", "gn": ""},
+    {"id": "module-yy", "name": "言语理解", "teacher": "郭熙", "course": "粉笔980言语", "hours": 28, "done": 0, "baidu": "", "mn": "", "gn": ""},
+    {"id": "module-pd", "name": "判断推理", "teacher": "花生十三", "course": "判断系统班", "hours": 42, "done": 0, "baidu": "", "mn": "", "gn": ""},
+    {"id": "module-sl", "name": "数量关系", "teacher": "花生十三", "course": "数量系统班", "hours": 34, "done": 0, "baidu": "", "mn": "", "gn": ""},
+    {"id": "module-cs", "name": "常识判断", "teacher": "李梦娇", "course": "常识碎片", "hours": 20, "done": 0, "baidu": "", "mn": "", "gn": ""},
+    {"id": "module-slun", "name": "申论", "teacher": "小马哥", "course": "申论系统课", "hours": 45, "done": 0, "baidu": "", "mn": "", "gn": ""}
+  ],
+  "plans": [
+    {"id": "plan-today-zl", "date": "2026-08-05", "module": "资料分析", "title": "系统班理论课 + 配套练习", "hours": 2, "phase": {"learn": false, "practice": false, "review": false}, "note": "看视频后立刻做对应题，再整理到笔记软件"},
+    {"id": "plan-today-review", "date": "2026-08-05", "module": "资料分析", "title": "错题/知识点小卡复盘", "hours": 0.5, "phase": {"learn": false, "practice": false, "review": false}, "note": "完成今日任务后刷卡"}
+  ],
+  "rounds": [
+    {"id": "round-1", "name": "第一轮：系统精讲", "start": "2026-08-05", "end": "2026-11-03", "goal": "跟系统班完整课程，按\"听课→作业→速通复习→600题\"四步走", "tasks": "听课、课后题、基础错题归因"},
+    {"id": "round-2", "name": "第二轮：模块刷题", "start": "2026-11-04", "end": "2027-01-02", "goal": "分模块刷题，攻克薄弱点，错题入册、真题穿插", "tasks": "专项课、限时题组、错题二刷"},
+    {"id": "round-3", "name": "第三轮：真题+模考", "start": "2027-01-03", "end": "2027-02-15", "goal": "限时做套题，近5年国考+贵州省考真题穿插，每周1-2次全真模考", "tasks": "每周套题、复盘耗时、修正取舍策略"},
+    {"id": "round-4", "name": "第四轮：冲刺押题", "start": "2027-02-16", "end": "2027-03-01", "goal": "回顾错题本、复盘高频考点、申论热点冲刺、时政押题", "tasks": "错题本、速通复习、考前点睛、模拟"}
+  ],
+  "wrongs": [],
+  "cards": [
+    {"id": "card-abrx", "module": "资料分析", "front": "ABRX四量关系是什么？", "back": "A基期量、B现期量、R增长率、X增长量。做题先判断所求量，再选公式。", "review": "2026-08-05", "level": 0}
+  ],
+  "pods": [
+    {"id": "pod-template", "title": "时政/常识磨耳朵模板", "url": "https://podcasts.apple.com/cn/browse", "dur": 20, "scene": "通勤"}
+  ],
+  "courts": [],
+  "leaves": [],
+  "adjusted": {},
+  "reminders": [
+    {"id": "reminder-morning", "time": "08:30", "type": "今日安排", "text": "查看今日学习任务"},
+    {"id": "reminder-night", "time": "21:40", "type": "复盘错题", "text": "刷一遍今日错题和知识小卡"}
+  ],
+  "logs": {},
+  "notified": {}
+}

@@ -1,0 +1,9 @@
+{
+  "name": "mikko88公考工作台",
+  "short_name": "公考工作台",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fff8ee",
+  "theme_color": "#ff8fb7",
+  "description": "可离线使用的公考学习、专注计时与艾宾浩斯复习工作台"
+}
