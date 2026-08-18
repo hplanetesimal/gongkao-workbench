@@ -485,18 +485,16 @@ textarea{min-height:56px;resize:vertical}
 
         <div class="panel">
           <h3>🔄 双向数据同步（电脑↔手机）</h3>
-          <p class="sub">配置后，电脑和手机端数据自动双向同步。在一台设备上修改，另一台打开时自动拉取最新数据。</p>
+          <p class="sub">只需在电脑和手机上输入同一个同步密码，数据就会自动双向同步。无需注册任何服务。</p>
           <div class="field">
-            <label><input type="checkbox" id="syncEnabled" style="width:auto;margin-right:6px">启用双向自动同步</label>
+            <label><input type="checkbox" id="syncEnabled" style="width:auto;margin-right:6px">启用自动同步</label>
           </div>
           <div id="syncFields" style="display:none">
-            <div class="field"><label>JSONBin Bin ID</label><input id="syncBinId" class="input" placeholder="如：6a3b5c...."></div>
-            <div class="field"><label>X-Master-Key</label><input id="syncApiKey" class="input" type="password" placeholder="$2a$10$..."></div>
-            <p class="sub">在 jsonbin.io 注册 → Create a Bin → 复制 Bin ID 和 Master Key</p>
+            <div class="field"><label>同步密码（电脑手机输入同一个）</label><input id="syncPwd" class="input" type="password" placeholder="如：xixi2027"></div>
             <div class="row" style="gap:8px;margin-bottom:8px">
-              <button class="btn primary" id="syncTestBtn">🔗测试连接</button>
-              <button class="btn" id="syncPushBtn">📤推送本地到云端</button>
-              <button class="btn" id="syncPullBtn">📥从云端拉取</button>
+              <button class="btn primary" id="syncStartBtn">🔗 开启同步</button>
+              <button class="btn" id="syncPushBtn">📤 手动推送</button>
+              <button class="btn" id="syncPullBtn">📥 手动拉取</button>
             </div>
             <div class="panel" style="background:var(--bg2);padding:8px 10px">
               <p class="sub" id="syncStatus">未同步</p>
@@ -633,7 +631,7 @@ function def(){return{
  practice:{daily:{'资料分析':20,'言语理解':20,'判断推理':20,'数量关系':10,'常识判断':10,'申论':1},logs:[]},
  logs:{}, notified:{},
  cloud:{provider:'',key:'',uid:'',autoSync:false,lastSync:'',lastBackup:''},
- sync:{enabled:false,binId:'',apiKey:'',lastPush:'',lastPull:''}
+ sync:{enabled:false,pwd:'',lastPush:'',lastPull:''}
 }}
 let st=load();
 function load(){
@@ -654,7 +652,7 @@ function syncAuto(){
 /* ===== 云端同步核心函数 ===== */
 function ensureCloud(){st.cloud=Object.assign({provider:'',key:'',uid:'',autoSync:false,lastSync:'',lastBackup:''},st.cloud||{})}
  /* 确保 sync 配置存在 */
- function ensureSync(){st.sync=Object.assign({enabled:false,binId:'',apiKey:'',lastPush:'',lastPull:''},st.sync||{})}
+ function ensureSync(){st.sync=Object.assign({enabled:false,pwd:'',lastPush:'',lastPull:''},st.sync||{})}
 /* UTF-8 安全的 Base64 编解码 */
 function syncEncode(obj){try{return btoa(unescape(encodeURIComponent(JSON.stringify(obj))))}catch(e){return ''}}
 function syncDecode(b64){try{return JSON.parse(decodeURIComponent(escape(atob(b64))))}catch(e){return null}}
@@ -754,71 +752,82 @@ function updateCloudStatus(){
  const backup=st.cloud.lastBackup||'从未';
  el.innerHTML=`通道：<b>${providerName}</b> | 自动同步：<b>${st.cloud.autoSync?'开启':'关闭'}</b><br>最后同步：${last} | 最后备份：${backup}`;
 }
-/* ===== JSONBin 双向数据同步 ===== */
+/* ===== 简易密码同步（基于 JSONBin 公共 Collection） ===== */
 /* 防抖推送：save 后 5 秒只推一次 */
 let _syncPushTimer=null;
 function syncPushDebounced(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.binId||!st.sync.apiKey)return;
+ if(!st.sync.enabled||!st.sync.pwd)return;
  clearTimeout(_syncPushTimer);
  _syncPushTimer=setTimeout(()=>{syncPush()},5000);
+}
+/* 根据密码生成确定性的 bin ID：使用公开 API 创建一次，之后固定 */
+function syncHash(pwd){
+ let h=0;for(let i=0;i<pwd.length;i++){h=((h<<5)-h+pwd.charCodeAt(i))|0}
+ return 'xixi_'+Math.abs(h).toString(36);
 }
 /* 推送本地数据到 JSONBin */
 async function syncPush(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.binId||!st.sync.apiKey)return {ok:false,msg:'未配置'};
+ if(!st.sync.enabled||!st.sync.pwd)return {ok:false,msg:'未配置'};
+ const binId=syncHash(st.sync.pwd);
  try{
-  const r=await fetch('https://api.jsonbin.io/v3/b/'+st.sync.binId,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':st.sync.apiKey},body:JSON.stringify(st)});
-  const d=await r.json();
+  const r=await fetch('https://api.jsonbin.io/v3/b/'+binId,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':st.sync.pwd},body:JSON.stringify(st)});
   if(r.ok){
    st.sync.lastPush=new Date().toISOString();save();
    updateSyncStatus();
    return {ok:true,msg:'推送成功'};
   }
+  /* 如果 bin 不存在，先创建 */
+  if(r.status===404){
+   const cr=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Bin-Name':binId,'X-Master-Key':st.sync.pwd},body:JSON.stringify(st)});
+   if(cr.ok){st.sync.lastPush=new Date().toISOString();save();updateSyncStatus();return {ok:true,msg:'已创建并推送'}}
+   return {ok:false,msg:'创建失败 HTTP '+cr.status};
+  }
+  const d=await r.json().catch(()=>({}));
   return {ok:false,msg:d.message||'HTTP '+r.status};
  }catch(e){return {ok:false,msg:'网络错误：'+e.message}}
 }
 /* 从 JSONBin 拉取数据 */
 async function syncPull(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.binId||!st.sync.apiKey)return {ok:false,msg:'未配置'};
+ if(!st.sync.enabled||!st.sync.pwd)return {ok:false,msg:'未配置'};
+ const binId=syncHash(st.sync.pwd);
  try{
-  const r=await fetch('https://api.jsonbin.io/v3/b/'+st.sync.binId+'/latest',{headers:{'X-Master-Key':st.sync.apiKey}});
+  const r=await fetch('https://api.jsonbin.io/v3/b/'+binId+'/latest',{headers:{'X-Master-Key':st.sync.pwd}});
+  if(r.status===404)return {ok:false,msg:'云端还没有数据，请先在一台设备上点「开启同步」'};
   if(!r.ok)return {ok:false,msg:'HTTP '+r.status};
   const d=await r.json();
   const cloud=d.record||d;
-  /* 校验拉取的数据是否有效 */
   if(!cloud||!cloud.profile||!cloud.plans)return {ok:false,msg:'云端数据格式异常'};
   const cloudTime=cloud.meta?.lastModified||0;
   const localTime=st.meta?.lastModified||0;
-  /* 冲突解决：时间戳大的优先 */
   if(cloudTime>localTime){
-   /* 云端更新，替换本地 */
-   const wasRunning=st.focus?.running;
-   const curSync=st.sync; /* 保留当前同步配置 */
+   const curSync=st.sync;
    st=cloud;
-   st.sync=curSync; /* 不覆盖同步配置 */
+   st.sync=curSync;
    ensureSync();ensureCloud();ensureFocus();
-   st.focus.running=false; /* 停止远程的计时状态 */
+   st.focus.running=false;
    save();updateSyncStatus();
-   return {ok:true,msg:'已拉取云端最新数据（云端较新）'};
+   return {ok:true,msg:'已拉取云端最新数据'};
   }else if(cloudTime<localTime){
-   /* 本地更新，推送到云端 */
    const res=await syncPush();
-   return {ok:true,msg:'本地数据较新，已自动推送'};
+   return {ok:true,msg:'本地较新，已自动推送'};
   }
   st.sync.lastPull=new Date().toISOString();save();updateSyncStatus();
   return {ok:true,msg:'数据已同步（无变化）'};
  }catch(e){return {ok:false,msg:'网络错误：'+e.message}}
 }
-/* 测试 JSONBin 连接 */
+/* 测试同步连接 */
 async function syncTest(){
  ensureSync();
- if(!st.sync.binId||!st.sync.apiKey)return {ok:false,msg:'请填写 Bin ID 和 API Key'};
+ if(!st.sync.pwd)return {ok:false,msg:'请输入同步密码'};
+ const binId=syncHash(st.sync.pwd);
  try{
-  const r=await fetch('https://api.jsonbin.io/v3/b/'+st.sync.binId+'/latest',{headers:{'X-Master-Key':st.sync.apiKey}});
-  if(r.ok)return {ok:true,msg:'连接成功，可正常读写'};
-  return {ok:false,msg:'HTTP '+r.status+'（检查 Bin ID 和 Key 是否正确）'};
+  const r=await fetch('https://api.jsonbin.io/v3/b/'+binId+'/latest',{headers:{'X-Master-Key':st.sync.pwd}});
+  if(r.ok)return {ok:true,msg:'连接成功，云端已有数据'};
+  if(r.status===404)return {ok:true,msg:'连接成功，云端暂无数据（首次使用）'};
+  return {ok:false,msg:'HTTP '+r.status};
  }catch(e){return {ok:false,msg:'网络错误：'+e.message}}
 }
 /* 更新同步状态显示 */
@@ -826,18 +835,17 @@ function updateSyncStatus(){
  ensureSync();
  const el=$('#syncStatus');if(!el)return;
  if(!st.sync.enabled){el.textContent='未启用';return}
- if(!st.sync.binId){el.textContent='未配置';return}
+ if(!st.sync.pwd){el.textContent='请输入同步密码';return}
  const lastPush=st.sync.lastPush?new Date(st.sync.lastPush).toLocaleString('zh-CN'):'从未';
  const lastPull=st.sync.lastPull?new Date(st.sync.lastPull).toLocaleString('zh-CN'):'从未';
  const mod=st.meta?.lastModified?new Date(st.meta.lastModified).toLocaleString('zh-CN'):'未知';
- el.innerHTML=`同步：<b>已启用</b><br>最后推送：${lastPush}<br>最后拉取：${lastPull}<br>本地更新：${mod}`;
+ el.innerHTML=`同步：<b>已启用</b>（密码：${st.sync.pwd?st.sync.pwd[0]+'***':'未设'}）<br>最后推送：${lastPush}<br>最后拉取：${lastPull}<br>本地更新：${mod}`;
 }
 /* 从 UI 保存同步配置 */
 function saveSyncConfig(){
  ensureSync();
  st.sync.enabled=$('#syncEnabled').checked;
- st.sync.binId=$('#syncBinId').value.trim();
- st.sync.apiKey=$('#syncApiKey').value.trim();
+ st.sync.pwd=$('#syncPwd')?$('#syncPwd').value.trim():st.sync.pwd||'';
  $('#syncFields').style.display=st.sync.enabled?'block':'none';
  save();updateSyncStatus();
 }
@@ -938,11 +946,10 @@ function init(){
  setTimeout(()=>syncDailyBackup(),3000);
  /* 双向数据同步：加载配置 + 启动时拉取 + 定时轮询 */
  $('#syncEnabled').checked=st.sync.enabled||false;
- $('#syncBinId').value=st.sync.binId||'';
- $('#syncApiKey').value=st.sync.apiKey||'';
+ if($('#syncPwd'))$('#syncPwd').value=st.sync.pwd||'';
  $('#syncFields').style.display=st.sync.enabled?'block':'none';
  updateSyncStatus();
- if(st.sync.enabled&&st.sync.binId){setTimeout(async()=>{const r=await syncPull();if(r.ok&&r.msg.includes('拉取')){renderAll();toast('🔄 '+r.msg)}startSyncPoll()},2000)}
+ if(st.sync.enabled&&st.sync.pwd){setTimeout(async()=>{const r=await syncPull();if(r.ok&&r.msg.includes('拉取')){renderAll();toast('🔄 '+r.msg)}startSyncPoll()},2000)}
  $('#profileName').value=st.profile.name;
  $('#examDate').value=st.examDate;
  $('#dailyMin').value=st.dailyMin||2;
@@ -1143,12 +1150,11 @@ function bind(){
  $('#cloudBackupBtn').onclick=()=>{ensureCloud();if(!st.cloud.provider){toast('请先配置推送通道');return}syncBackup()};
  $('#cloudRestoreBtn').onclick=()=>{const v=$('#cloudRestoreData').value;if(!v.trim()){toast('请粘贴备份数据');return}syncRestore(v)};
  /* 双向数据同步事件绑定 */
- $('#syncEnabled').onchange=()=>{saveSyncConfig();if(st.sync.enabled)toast('已启用双向同步');startSyncPoll()};
- $('#syncBinId').onchange=saveSyncConfig;
- $('#syncApiKey').onchange=saveSyncConfig;
- $('#syncTestBtn').onclick=async()=>{ensureSync();saveSyncConfig();const r=await syncTest();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
- $('#syncPushBtn').onclick=async()=>{ensureSync();if(!st.sync.binId){toast('请先配置');return}toast('正在推送...');const r=await syncPush();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
- $('#syncPullBtn').onclick=async()=>{ensureSync();if(!st.sync.binId){toast('请先配置');return}toast('正在拉取...');const r=await syncPull();if(r.ok&&r.msg.includes('拉取'))renderAll();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
+ $('#syncEnabled').onchange=()=>{saveSyncConfig();if(st.sync.enabled)toast('已启用同步，请输入密码后点「开启同步」');startSyncPoll()};
+ if($('#syncPwd'))$('#syncPwd').onchange=saveSyncConfig;
+ $('#syncStartBtn').onclick=async()=>{ensureSync();if(!$('#syncPwd')||!$('#syncPwd').value.trim()){toast('请输入同步密码');return}saveSyncConfig();toast('正在连接...');const r=await syncPush();toast(r.ok?'✅ '+r.msg+'！另一台设备输入同样密码即可同步':'❌ '+r.msg);if(r.ok)startSyncPoll()};
+ $('#syncPushBtn').onclick=async()=>{ensureSync();if(!st.sync.pwd){toast('请先输入密码并开启同步');return}toast('正在推送...');const r=await syncPush();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
+ $('#syncPullBtn').onclick=async()=>{ensureSync();if(!st.sync.pwd){toast('请先输入密码并开启同步');return}toast('正在拉取...');const r=await syncPull();if(r.ok&&r.msg.includes('拉取'))renderAll();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
 
  document.body.onclick=e=>{
   let t=e.target;
