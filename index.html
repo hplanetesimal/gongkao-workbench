@@ -34,6 +34,8 @@ button,input,select,textarea{font:inherit}button{border:0;cursor:pointer;backgro
 .h-stat{text-align:center;min-width:36px}
 .h-stat b{display:block;font-size:14px;color:var(--deep);font-weight:800;line-height:1.2}
 .h-stat span{font-size:9px;color:var(--muted)}
+.refresh-btn{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:16px;color:var(--soft);cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent}
+.refresh-btn:active{transform:rotate(360deg);transition:.4s;background:var(--accent);color:#fff}
 /* Content */
 .app-body{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
 .tab-pane{display:none;flex:1;flex-direction:column;overflow:hidden;min-height:0}
@@ -128,6 +130,7 @@ textarea{min-height:56px;resize:vertical}
         <div class="h-stat"><b id="hHours">2.0</b><span>今日h</span></div>
         <div class="h-stat"><b id="hProgress">0/2</b><span>任务</span></div>
       </div>
+      <button id="refreshBtn" class="refresh-btn" title="刷新页面">🔄</button>
     </div>
   </header>
 
@@ -1202,6 +1205,18 @@ function renderStats(){
 function bind(){
  $('.bottom-nav').onclick=e=>{let b=e.target.closest('.nav-btn');if(!b)return;switchTab(b.dataset.tab)};
  $('#avatar').onclick=()=>{switchTab('settings');switchSub('settings','profile')};
+ /* 刷新按钮：单击刷新页面，长按清除缓存强制刷新 */
+ (function(){
+   let pressTimer=null;
+   const btn=$('#refreshBtn');
+   if(!btn)return;
+   btn.addEventListener('touchstart',()=>{pressTimer=setTimeout(()=>{if(navigator.serviceWorker&&navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({action:'clearCache'})}if('caches'in window){caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)))}setTimeout(()=>location.reload(true),300);toast('已清除缓存，正在刷新...')},800)});
+   btn.addEventListener('touchend',()=>{clearTimeout(pressTimer)});
+   btn.addEventListener('mousedown',()=>{pressTimer=setTimeout(()=>{if(navigator.serviceWorker&&navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage({action:'clearCache'})}if('caches'in window){caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)))}setTimeout(()=>location.reload(true),300);toast('已清除缓存，正在刷新...')},800)});
+   btn.addEventListener('mouseup',()=>{clearTimeout(pressTimer)});
+   btn.addEventListener('mouseleave',()=>{clearTimeout(pressTimer)});
+   btn.addEventListener('click',()=>{location.reload()});
+ })();
  $('#profileName').onchange=e=>{st.profile.name=e.target.value;save();renderTop();toast('名字已保存')};
  $('#avatarFile').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{st.profile.avatar=r.result;save();renderAvatar();toast('头像已更新')};r.readAsDataURL(f)};
  $('#examDate').onchange=e=>{st.examDate=e.target.value;save();renderAll();toast('考公日期已更新')};
