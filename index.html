@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="公考工作台">
+<meta name="apple-mobile-web-app-title" content="溪溪加油站">
 <meta name="theme-color" content="#ff8fb7">
-<title>mikko88 随心秀 · 2027公考工作台</title>
+<title>🌸溪溪加油站</title>
 <link rel="manifest" href="./manifest.json">
 <style>
 :root{
@@ -695,7 +695,7 @@ async function syncNotify(){
  const fm=(st.focus?.sessions||[]).filter(s=>s.date===t).reduce((a,s)=>a+(+s.minutes||0),0);
  const dueCards=st.cards.filter(c=>c.review<=t).length;
  const status=dayStatus();
- const title='📚公考工作台 '+t;
+ const title='🌸溪溪加油站 '+t;
  const content=`## 今日学习摘要\n\n`+
   `**日期：** ${t}（${['日','一','二','三','四','五','六'][new Date().getDay()]}）\n\n`+
   `**今日状态：** ${status.label}\n\n`+
@@ -715,7 +715,7 @@ async function syncBackup(){
  if(!data)return toast('数据编码失败');
  const t=today();
  const fm=(st.focus?.sessions||[]).filter(s=>s.date===t).reduce((a,s)=>a+(+s.minutes||0),0);
- const title='💾公考工作台备份 '+t;
+ const title='💾溪溪加油站备份 '+t;
  /* 将 Base64 数据放在 HTML 中，方便从微信复制 */
  const content=`## 📦 完整数据备份\n\n`+
   `**备份时间：** ${new Date().toLocaleString('zh-CN')}\n\n`+
@@ -1139,7 +1139,7 @@ function bind(){
  $('#cloudWxUid').onchange=saveCloudConfig;
  $('#cloudSCKey').onchange=saveCloudConfig;
  $('#cloudAutoSync').onchange=saveCloudConfig;
- $('#cloudTestBtn').onclick=async()=>{ensureCloud();saveCloudConfig();if(!st.cloud.provider){toast('请先选择推送通道');return}toast('正在测试...');const res=await syncSend('🔗测试消息','这是一条来自公考工作台的测试消息，收到说明配置成功！');toast(res.ok?'✅ '+res.msg:'❌ '+res.msg)};
+ $('#cloudTestBtn').onclick=async()=>{ensureCloud();saveCloudConfig();if(!st.cloud.provider){toast('请先选择推送通道');return}toast('正在测试...');const res=await syncSend('🔗测试消息','这是一条来自溪溪加油站的测试消息，收到说明配置成功！');toast(res.ok?'✅ '+res.msg:'❌ '+res.msg)};
  $('#cloudBackupBtn').onclick=()=>{ensureCloud();if(!st.cloud.provider){toast('请先配置推送通道');return}syncBackup()};
  $('#cloudRestoreBtn').onclick=()=>{const v=$('#cloudRestoreData').value;if(!v.trim()){toast('请粘贴备份数据');return}syncRestore(v)};
  /* 双向数据同步事件绑定 */
@@ -1207,7 +1207,7 @@ function bind(){
  $('#importCourse').onclick=importCourse;$('#downloadTemplate').onclick=downloadTemplate;
  $('#importPlanExcelBtn').onclick=()=>$('#planExcelFile').click();
  $('#planExcelFile').onchange=e=>{let f=e.target.files[0];if(f)importPlanExcel(f)};
- $('#exportData').onclick=()=>{let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(st,null,2)],{type:'application/json'}));a.download='mikko88-gongkao-backup-'+today()+'.json';a.click()};
+ $('#exportData').onclick=()=>{let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(st,null,2)],{type:'application/json'}));a.download='xixi-backup-'+today()+'.json';a.click()};
  $('#importDataBtn').onclick=()=>$('#importData').click();$('#importData').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{st=JSON.parse(r.result);save();location.reload()};r.readAsText(f)};
  $('#resetData').onclick=()=>{if(confirm('确认清空全部数据？')){localStorage.removeItem(KEY);location.reload()}};
  document.body.onchange=e=>{if(e.target.dataset.mn||e.target.dataset.gn){let m=st.modules.find(x=>x.id===(e.target.dataset.mn||e.target.dataset.gn));if(e.target.dataset.mn)m.mn=e.target.value;else m.gn=e.target.value;save();renderNotes();toast('链接已保存')}if(e.target.dataset.practiceCount){st.practice.daily[e.target.dataset.practiceCount]=+e.target.value||0;save();renderAll();toast('刷题计划已保存')}};
@@ -1251,7 +1251,7 @@ function notifyDaily(){
   const key=today()+'-'+r.id+'-'+hm;
   if(r.time===hm&&!st.notified[key]){
    const body=r.type==='今日安排'?('今日任务：'+st.plans.filter(p=>p.date===today()).slice(0,3).map(p=>p.title).join('；')):r.text;
-   if('Notification'in window&&Notification.permission==='granted')new Notification('mikko88公考提醒：'+r.type,{body:body||r.text});
+   if('Notification'in window&&Notification.permission==='granted')new Notification('🌸溪溪加油站提醒：'+r.type,{body:body||r.text});
    toast(r.type+'：'+(body||r.text));st.notified[key]=true;save();
   }
  });
