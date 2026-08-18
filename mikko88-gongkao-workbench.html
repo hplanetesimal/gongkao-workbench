@@ -488,12 +488,14 @@ textarea{min-height:56px;resize:vertical}
 
         <div class="panel">
           <h3>🔄 双向数据同步（电脑↔手机）</h3>
-          <p class="sub">电脑和手机输入同一个同步密码，选择合并方式后点按钮。智能合并 = 保留双方数据，只叠加各自的新增/删除/修改。</p>
+          <p class="sub">用 GitHub Token 把数据同步到云端，电脑手机输入同一个 Token 即可双向同步。</p>
           <div class="field">
             <label><input type="checkbox" id="syncEnabled" style="width:auto;margin-right:6px">启用自动同步</label>
           </div>
           <div id="syncFields" style="display:none">
-            <div class="field"><label>同步密码（电脑手机输入同一个）</label><input id="syncPwd" class="input" type="password" placeholder="如：xixi2027"></div>
+            <div class="field"><label>GitHub 用户名</label><input id="syncUser" class="input" placeholder="如：hplanetesimal"></div>
+            <div class="field"><label>仓库名</label><input id="syncRepo" class="input" placeholder="如：gongkao-workbench"></div>
+            <div class="field"><label>Personal Access Token</label><input id="syncToken" class="input" type="password" placeholder="ghp_...（需 repo 权限）"></div>
             <div class="field"><label>合并方式</label>
               <select id="syncMode" class="input">
                 <option value="merge">智能合并（保留双方数据，只叠加变更）</option>
@@ -501,8 +503,9 @@ textarea{min-height:56px;resize:vertical}
                 <option value="localOver">本地覆盖云端（电脑数据传入手机）</option>
               </select>
             </div>
+            <p class="sub">在 GitHub → Settings → Developer settings → Personal access tokens 生成 Token（勾选 repo 权限）</p>
             <div class="row" style="gap:8px;margin-bottom:8px">
-              <button class="btn primary" id="syncStartBtn">🔗 开启同步</button>
+              <button class="btn primary" id="syncStartBtn">🔗 测试并开启</button>
               <button class="btn" id="syncMergeBtn">🔀 智能合并</button>
               <button class="btn" id="syncPushBtn">📤 推送本地</button>
               <button class="btn" id="syncPullBtn">📥 拉取云端</button>
@@ -642,7 +645,7 @@ function def(){return{
  practice:{daily:{'资料分析':20,'言语理解':20,'判断推理':20,'数量关系':10,'常识判断':10,'申论':1},logs:[]},
  logs:{}, notified:{},
  cloud:{provider:'',key:'',uid:'',autoSync:false,lastSync:'',lastBackup:''},
- sync:{enabled:false,pwd:'',mode:'merge',lastPush:'',lastPull:''}
+ sync:{enabled:false,user:'',repo:'',token:'',mode:'merge',lastPush:'',lastPull:'',sha:''}
 }}
 let st=load();
 function load(){
@@ -663,7 +666,7 @@ function syncAuto(){
 /* ===== 云端同步核心函数 ===== */
 function ensureCloud(){st.cloud=Object.assign({provider:'',key:'',uid:'',autoSync:false,lastSync:'',lastBackup:''},st.cloud||{})}
  /* 确保 sync 配置存在 */
- function ensureSync(){st.sync=Object.assign({enabled:false,pwd:'',mode:'merge',lastPush:'',lastPull:''},st.sync||{})}
+ function ensureSync(){st.sync=Object.assign({enabled:false,user:'',repo:'',token:'',mode:'merge',lastPush:'',lastPull:'',sha:''},st.sync||{})}
 /* UTF-8 安全的 Base64 编解码 */
 function syncEncode(obj){try{return btoa(unescape(encodeURIComponent(JSON.stringify(obj))))}catch(e){return ''}}
 function syncDecode(b64){try{return JSON.parse(decodeURIComponent(escape(atob(b64))))}catch(e){return null}}
@@ -768,52 +771,50 @@ function updateCloudStatus(){
 let _syncPushTimer=null;
 function syncPushDebounced(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.pwd)return;
+ if(!st.sync.enabled||!st.sync.token)return;
  clearTimeout(_syncPushTimer);
  _syncPushTimer=setTimeout(()=>{syncPush()},5000);
 }
-/* 根据密码生成确定性的 bin ID：使用公开 API 创建一次，之后固定 */
-function syncHash(pwd){
- let h=0;for(let i=0;i<pwd.length;i++){h=((h<<5)-h+pwd.charCodeAt(i))|0}
- return 'xixi_'+Math.abs(h).toString(36);
-}
-/* 推送本地数据到 JSONBin */
+/* 推送本地数据到 GitHub 仓库 sync-data.json */
 async function syncPush(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.pwd)return {ok:false,msg:'未配置'};
- const binId=syncHash(st.sync.pwd);
+ if(!st.sync.enabled||!st.sync.token||!st.sync.user||!st.sync.repo)return {ok:false,msg:'未配置'};
+ const url='https://api.github.com/repos/'+st.sync.user+'/'+st.sync.repo+'/contents/sync-data.json';
+ const content=syncEncode(st);
  try{
-  const r=await fetch('https://api.jsonbin.io/v3/b/'+binId,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':st.sync.pwd},body:JSON.stringify(st)});
+  /* 先获取当前文件的 sha（如果存在） */
+  let sha='';
+  const gr=await fetch(url,{headers:{'Authorization':'token '+st.sync.token,'Accept':'application/vnd.github.v3+json'}});
+  if(gr.ok){const gd=await gr.json();sha=gd.sha||''}
+  /* 推送数据 */
+  const body={message:'sync: '+new Date().toISOString(),content:content};
+  if(sha)body.sha=sha;
+  const r=await fetch(url,{method:'PUT',headers:{'Authorization':'token '+st.sync.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'},body:JSON.stringify(body)});
   if(r.ok){
-   st.sync.lastPush=new Date().toISOString();save();
-   updateSyncStatus();
+   const d=await r.json();
+   st.sync.sha=d.content?.sha||'';st.sync.lastPush=new Date().toISOString();
+   save();updateSyncStatus();
    return {ok:true,msg:'推送成功'};
-  }
-  /* 如果 bin 不存在，先创建 */
-  if(r.status===404){
-   const cr=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Bin-Name':binId,'X-Master-Key':st.sync.pwd},body:JSON.stringify(st)});
-   if(cr.ok){st.sync.lastPush=new Date().toISOString();save();updateSyncStatus();return {ok:true,msg:'已创建并推送'}}
-   return {ok:false,msg:'创建失败 HTTP '+cr.status};
   }
   const d=await r.json().catch(()=>({}));
   return {ok:false,msg:d.message||'HTTP '+r.status};
  }catch(e){return {ok:false,msg:'网络错误：'+e.message}}
 }
-/* 从 JSONBin 拉取数据（按模式处理） */
+/* 从 GitHub 仓库拉取 sync-data.json */
 async function syncPull(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.pwd)return {ok:false,msg:'未配置'};
- const binId=syncHash(st.sync.pwd);
+ if(!st.sync.enabled||!st.sync.token||!st.sync.user||!st.sync.repo)return {ok:false,msg:'未配置'};
+ const url='https://api.github.com/repos/'+st.sync.user+'/'+st.sync.repo+'/contents/sync-data.json';
  try{
-  const r=await fetch('https://api.jsonbin.io/v3/b/'+binId+'/latest',{headers:{'X-Master-Key':st.sync.pwd}});
-  if(r.status===404)return {ok:false,msg:'云端还没有数据，请先在一台设备上点「开启同步」'};
+  const r=await fetch(url,{headers:{'Authorization':'token '+st.sync.token,'Accept':'application/vnd.github.v3+json'}});
+  if(r.status===404)return {ok:false,msg:'云端还没有数据，请先点「推送本地」'};
   if(!r.ok)return {ok:false,msg:'HTTP '+r.status};
   const d=await r.json();
-  const cloud=d.record||d;
+  const cloud=syncDecode(d.content);
   if(!cloud||!cloud.profile||!cloud.plans)return {ok:false,msg:'云端数据格式异常'};
+  st.sync.sha=d.sha||'';
   const mode=st.sync.mode||'merge';
   if(mode==='cloudOver'){
-   /* 云端覆盖本地 */
    const curSync=st.sync;
    st=cloud;
    st.sync=curSync;
@@ -822,10 +823,9 @@ async function syncPull(){
    save();updateSyncStatus();
    return {ok:true,msg:'已用云端数据覆盖本地'};
   }else if(mode==='merge'){
-   /* 智能合并 */
    return syncMergeData(cloud);
   }
-  /* localOver 模式：本地覆盖云端 = 推送本地 */
+  /* localOver：本地覆盖云端 */
   const res=await syncPush();
   return {ok:true,msg:'已用本地数据覆盖云端'};
  }catch(e){return {ok:false,msg:'网络错误：'+e.message}}
@@ -833,9 +833,8 @@ async function syncPull(){
 /* 智能合并：按ID逐项对比，保留双方数据，只叠加变更 */
 function syncMergeData(cloud){
  const curSync=st.sync;
- const merged=JSON.parse(JSON.stringify(st)); /* 以本地为基础 */
+ const merged=JSON.parse(JSON.stringify(st));
  let stats={add:0,mod:0,del:0};
- /* 需要按ID合并的数组类型 */
  const arrays=[
    ['plans','id'],
    ['courts','id'],
@@ -846,28 +845,25 @@ function syncMergeData(cloud){
    ['pods','id'],
    ['modules','id']
  ];
- arrays.forEach(([key,idField])=>{
-   const localArr=merged[key]||[];
-   const cloudArr=cloud[key]||[];
-   const localMap={};localArr.forEach(x=>localMap[x[idField]]=x);
-   const cloudMap={};cloudArr.forEach(x=>cloudMap[x[idField]]=x);
-   /* 遍历云端：新增或修改 */
-   cloudArr.forEach(cx=>{
-     const lx=localMap[cx[idField]];
+ arrays.forEach(function(arr){
+   var key=arr[0],idField=arr[1];
+   var localArr=merged[key]||[];
+   var cloudArr=cloud[key]||[];
+   var localMap={};localArr.forEach(function(x){localMap[x[idField]]=x});
+   var cloudMap={};cloudArr.forEach(function(x){cloudMap[x[idField]]=x});
+   cloudArr.forEach(function(cx){
+     var lx=localMap[cx[idField]];
      if(!lx){localArr.push(cx);stats.add++}
      else{
-       /* 对比修改时间，新的覆盖 */
-       const ct=cx.meta?.lastModified||cx._t||0;
-       const lt=lx.meta?.lastModified||lx._t||0;
+       var ct=(cx.meta&&cx.meta.lastModified)||cx._t||0;
+       var lt=(lx.meta&&lx.meta.lastModified)||lx._t||0;
        if(ct>lt){Object.assign(lx,cx);stats.mod++}
      }
    });
-   /* 本地有但云端已删除的：保留（用户可选择手动删） */
    merged[key]=localArr;
  });
- /* 标量字段：云端较新则取云端值 */
- const cloudT=cloud.meta?.lastModified||0;
- const localT=st.meta?.lastModified||0;
+ var cloudT=(cloud.meta&&cloud.meta.lastModified)||0;
+ var localT=(st.meta&&st.meta.lastModified)||0;
  if(cloudT>localT){
    if(cloud.profile)merged.profile=cloud.profile;
    if(cloud.examDate)merged.examDate=cloud.examDate;
@@ -886,34 +882,24 @@ function syncMergeData(cloud){
  save();updateSyncStatus();
  return {ok:true,msg:'智能合并完成（+'+stats.add+' 新增，'+stats.mod+' 更新）'};
 }
-/* 测试同步连接 */
-async function syncTest(){
- ensureSync();
- if(!st.sync.pwd)return {ok:false,msg:'请输入同步密码'};
- const binId=syncHash(st.sync.pwd);
- try{
-  const r=await fetch('https://api.jsonbin.io/v3/b/'+binId+'/latest',{headers:{'X-Master-Key':st.sync.pwd}});
-  if(r.ok)return {ok:true,msg:'连接成功，云端已有数据'};
-  if(r.status===404)return {ok:true,msg:'连接成功，云端暂无数据（首次使用）'};
-  return {ok:false,msg:'HTTP '+r.status};
- }catch(e){return {ok:false,msg:'网络错误：'+e.message}}
-}
 /* 更新同步状态显示 */
 function updateSyncStatus(){
  ensureSync();
  const el=$('#syncStatus');if(!el)return;
  if(!st.sync.enabled){el.textContent='未启用';return}
- if(!st.sync.pwd){el.textContent='请输入同步密码';return}
+ if(!st.sync.token){el.textContent='请填写 GitHub Token';return}
  const lastPush=st.sync.lastPush?new Date(st.sync.lastPush).toLocaleString('zh-CN'):'从未';
  const lastPull=st.sync.lastPull?new Date(st.sync.lastPull).toLocaleString('zh-CN'):'从未';
- const mod=st.meta?.lastModified?new Date(st.meta.lastModified).toLocaleString('zh-CN'):'未知';
- el.innerHTML=`同步：<b>已启用</b>（密码：${st.sync.pwd?st.sync.pwd[0]+'***':'未设'}）<br>最后推送：${lastPush}<br>最后拉取：${lastPull}<br>本地更新：${mod}`;
+ const mod=st.meta&&st.meta.lastModified?new Date(st.meta.lastModified).toLocaleString('zh-CN'):'未知';
+ el.innerHTML='同步：<b>已启用</b>（'+st.sync.user+'/'+st.sync.repo+'）<br>最后推送：'+lastPush+'<br>最后拉取：'+lastPull+'<br>本地更新：'+mod;
 }
 /* 从 UI 保存同步配置 */
 function saveSyncConfig(){
  ensureSync();
  st.sync.enabled=$('#syncEnabled').checked;
- st.sync.pwd=$('#syncPwd')?$('#syncPwd').value.trim():st.sync.pwd||'';
+ if($('#syncUser'))st.sync.user=$('#syncUser').value.trim();
+ if($('#syncRepo'))st.sync.repo=$('#syncRepo').value.trim();
+ if($('#syncToken'))st.sync.token=$('#syncToken').value.trim();
  if($('#syncMode'))st.sync.mode=$('#syncMode').value;
  $('#syncFields').style.display=st.sync.enabled?'block':'none';
  save();updateSyncStatus();
@@ -922,7 +908,7 @@ function saveSyncConfig(){
 let _syncPullTimer=null;
 function startSyncPoll(){
  ensureSync();
- if(!st.sync.enabled||!st.sync.pwd)return;
+ if(!st.sync.enabled||!st.sync.token)return;
  clearInterval(_syncPullTimer);
  _syncPullTimer=setInterval(()=>{if(document.visibilityState==='visible')syncPull()},60000);
 }
@@ -1015,11 +1001,13 @@ function init(){
  setTimeout(()=>syncDailyBackup(),3000);
  /* 双向数据同步：加载配置 + 启动时拉取 + 定时轮询 */
  $('#syncEnabled').checked=st.sync.enabled||false;
- if($('#syncPwd'))$('#syncPwd').value=st.sync.pwd||'';
+ if($('#syncUser'))$('#syncUser').value=st.sync.user||'';
+ if($('#syncRepo'))$('#syncRepo').value=st.sync.repo||'';
+ if($('#syncToken'))$('#syncToken').value=st.sync.token||'';
  if($('#syncMode'))$('#syncMode').value=st.sync.mode||'merge';
  $('#syncFields').style.display=st.sync.enabled?'block':'none';
  updateSyncStatus();
- if(st.sync.enabled&&st.sync.pwd){setTimeout(async()=>{const r=await syncPull();if(r.ok&&(r.msg.includes('拉取')||r.msg.includes('合并')||r.msg.includes('覆盖')))renderAll();toast('🔄 '+r.msg);startSyncPoll()},2000)}
+ if(st.sync.enabled&&st.sync.token){setTimeout(async()=>{const r=await syncPull();if(r.ok&&(r.msg.includes('拉取')||r.msg.includes('合并')||r.msg.includes('覆盖')))renderAll();toast('🔄 '+r.msg);startSyncPoll()},2000)}
  $('#profileName').value=st.profile.name;
  $('#examDate').value=st.examDate;
  $('#dailyMin').value=st.dailyMin||2;
@@ -1242,13 +1230,15 @@ function bind(){
  $('#cloudBackupBtn').onclick=()=>{ensureCloud();if(!st.cloud.provider){toast('请先配置推送通道');return}syncBackup()};
  $('#cloudRestoreBtn').onclick=()=>{const v=$('#cloudRestoreData').value;if(!v.trim()){toast('请粘贴备份数据');return}syncRestore(v)};
  /* 双向数据同步事件绑定 */
- $('#syncEnabled').onchange=()=>{saveSyncConfig();if(st.sync.enabled)toast('已启用同步，请输入密码并选合并方式');startSyncPoll()};
- if($('#syncPwd'))$('#syncPwd').onchange=saveSyncConfig;
+ $('#syncEnabled').onchange=()=>{saveSyncConfig();if(st.sync.enabled)toast('已启用同步，请填入 GitHub 信息');startSyncPoll()};
+ if($('#syncUser'))$('#syncUser').onchange=saveSyncConfig;
+ if($('#syncRepo'))$('#syncRepo').onchange=saveSyncConfig;
+ if($('#syncToken'))$('#syncToken').onchange=saveSyncConfig;
  if($('#syncMode'))$('#syncMode').onchange=saveSyncConfig;
- $('#syncStartBtn').onclick=async()=>{ensureSync();if(!$('#syncPwd')||!$('#syncPwd').value.trim()){toast('请输入同步密码');return}saveSyncConfig();toast('正在连接...');const r=await syncPush();toast(r.ok?'✅ '+r.msg+'！另一台设备输入同样密码即可同步':'❌ '+r.msg);if(r.ok)startSyncPoll()};
- $('#syncMergeBtn').onclick=async()=>{ensureSync();if(!st.sync.pwd){toast('请先输入密码并开启同步');return}toast('正在智能合并...');const r=await syncPull();if(r.ok)renderAll();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
- $('#syncPushBtn').onclick=async()=>{ensureSync();if(!st.sync.pwd){toast('请先输入密码并开启同步');return}toast('正在推送...');const r=await syncPush();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
- $('#syncPullBtn').onclick=async()=>{ensureSync();if(!st.sync.pwd){toast('请先输入密码并开启同步');return}toast('正在拉取...');const r=await syncPull();if(r.ok)renderAll();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
+ $('#syncStartBtn').onclick=async()=>{ensureSync();if(!$('#syncUser')||!$('#syncUser').value.trim()||!$('#syncRepo')||!$('#syncRepo').value.trim()||!$('#syncToken')||!$('#syncToken').value.trim()){toast('请填写 GitHub 用户名、仓库名和 Token');return}saveSyncConfig();toast('正在测试连接...');const r=await syncPush();toast(r.ok?'✅ '+r.msg+'！另一台设备填入同样信息即可同步':'❌ '+r.msg);if(r.ok)startSyncPoll()};
+ $('#syncMergeBtn').onclick=async()=>{ensureSync();if(!st.sync.token){toast('请先填写 Token 并开启同步');return}toast('正在智能合并...');const r=await syncPull();if(r.ok)renderAll();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
+ $('#syncPushBtn').onclick=async()=>{ensureSync();if(!st.sync.token){toast('请先填写 Token 并开启同步');return}toast('正在推送...');const r=await syncPush();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
+ $('#syncPullBtn').onclick=async()=>{ensureSync();if(!st.sync.token){toast('请先填写 Token 并开启同步');return}toast('正在拉取...');const r=await syncPull();if(r.ok)renderAll();toast(r.ok?'✅ '+r.msg:'❌ '+r.msg)};
 
  document.body.onclick=e=>{
   let t=e.target;
