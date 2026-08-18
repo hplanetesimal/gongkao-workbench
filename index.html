@@ -74,6 +74,7 @@ textarea{min-height:56px;resize:vertical}
 .task.done,.course.done{opacity:.6;background:#fff7f0}
 .check{width:22px;height:22px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;color:transparent;font-weight:900;font-size:12px}
 .done .check{background:var(--green);border-color:var(--green);color:#fff}
+.check.sel{background:var(--blue);border-color:var(--blue);color:#fff}
 .tag{display:inline-flex;border-radius:999px;padding:1px 7px;font-size:10px;font-weight:800;background:#fff2f7;color:var(--deep);margin-right:3px}
 .tag.blue{background:#edf7ff;color:var(--blue)}.tag.green{background:#ecfbf2;color:var(--green)}.tag.yellow{background:#fff8dc;color:#ad7c10}
 .round{border:1px solid var(--line);background:#fff;border-radius:16px;padding:12px;margin-bottom:8px}
@@ -150,7 +151,7 @@ textarea{min-height:56px;resize:vertical}
         <div class="stat-row" id="todayStats"><div class="stat-card"><b>8/7</b><span>今日日期</span></div><div class="stat-card"><b>2.0h</b><span>计划学习</span></div><div class="stat-card"><b>0/2</b><span>任务进度</span></div><div class="stat-card"><b>正常日</b><span>今日状态</span></div></div>
         <div class="panel">
           <h3>📋 今日学习清单</h3>
-          <p class="sub">点击 ✓ 完成任务 · 学习/做题/复盘三步闭环</p>
+          <p class="sub">点击 ✓ 直接勾选完成任务 · 也可逐个点学习/做题/复盘 · 下方可手动记录做题时间</p>
           <div id="todayTasks"><div class="task "><div class="check">✓</div><div><b>系2 实用速算技巧</b><br><span class="tag">资料分析</span><span class="tag blue">1h</span><span class="tag green">0/3</span><p class="sub">Excel同步导入</p><div class="row"><button class="btn" data-phase="mshjlm0jetsr8:learn">学习</button><button class="btn" data-phase="mshjlm0jetsr8:practice">做题</button><button class="btn" data-phase="mshjlm0jetsr8:review">复盘</button></div></div><button class="btn danger" data-delplan="mshjlm0jetsr8">删</button></div><div class="task "><div class="check">✓</div><div><b>课后作业 加法、乘法</b><br><span class="tag">资料分析</span><span class="tag blue">1h</span><span class="tag green">0/3</span><p class="sub">Excel同步导入</p><div class="row"><button class="btn" data-phase="mshjlm0j9utdd:learn">学习</button><button class="btn" data-phase="mshjlm0j9utdd:practice">做题</button><button class="btn" data-phase="mshjlm0j9utdd:review">复盘</button></div></div><button class="btn danger" data-delplan="mshjlm0j9utdd">删</button></div></div>
         </div>
         <div class="panel">
@@ -642,7 +643,7 @@ function load(){
   return Object.assign(def(),s);
  }catch(e){return def()}
 }
-function save(){st.meta=st.meta||{};st.meta.lastModified=Date.now();localStorage.setItem(KEY,JSON.stringify(st));syncAuto();syncPushDebounced()}
+function save(){st.meta=st.meta||{};st.meta.lastModified=Date.now();const{_planSel,...data}=st;localStorage.setItem(KEY,JSON.stringify(data));syncAuto();syncPushDebounced()}
 /* 云端同步：防抖触发，save 后 30 秒只发一次摘要 */
 let _syncTimer=null;
 function syncAuto(){
@@ -950,6 +951,10 @@ function init(){
  if($('#wReview'))$('#wReview').value=addDays(1);
  if($('#cReview'))$('#cReview').value=today();
  renderAvatar();renderOptions();renderAll();bind();
+ /* 数据自动留存：页面关闭/隐藏时保存，每30秒定期保存 */
+ window.addEventListener('beforeunload',()=>save());
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')save()});
+ setInterval(()=>save(),30000);
 }
 function renderAvatar(){
  const html=st.profile.avatar?'<img src="'+st.profile.avatar+'">':'🧸';
@@ -1076,8 +1081,8 @@ function renderToday(){
  const due=[...st.cards.filter(c=>c.review<=today()),...st.wrongs.filter(w=>w.review<=today()).map(w=>({id:'w'+w.id,module:w.module,front:w.question,back:w.note||w.reason,wrong:true}))].slice(0,6);
  $('#todayCards').innerHTML=due.length?due.map(cardHtml).join(''):'<p class="sub">暂无到期卡片，今天可以复盘已学知识点。</p>';
 }
-function planHtml(p){let d=isDonePlan(p);return `<div class="task ${d?'done':''}"><div class="check">✓</div><div><b>${p.title}</b><br><span class="tag">${p.module}</span><span class="tag blue">${p.hours||0}h</span><span class="tag green">${phaseText(p.phase)}</span>${p.date!==today()?`<span class="tag yellow">${p.date}</span>`:''}<p class="sub">${p.note||''}</p><div class="row"><button class="btn" data-phase="${p.id}:learn">学习</button><button class="btn" data-phase="${p.id}:practice">做题</button><button class="btn" data-phase="${p.id}:review">复盘</button>${!d?'<button class="btn" data-postpone="'+p.id+'">⏭顺延</button>':''}</div></div><button class="btn danger" data-delplan="${p.id}">删</button></div>`}
-function renderPlans(){const list=[...st.plans].sort((a,b)=>a.date.localeCompare(b.date));$('#planList').innerHTML=list.length?list.map(p=>{let d=isDonePlan(p);let isToday=p.date===today();let isFuture=p.date>today();return `<div class="task ${d?'done':''}"><div class="check">✓</div><div><b>${p.date} · ${p.title}</b><br><span class="tag">${p.module}</span><span class="tag blue">${p.hours||0}h</span><span class="tag green">${phaseText(p.phase)}</span>${isToday?'<span class="tag yellow">今日</span>':''}<p class="sub">${p.note||''}</p><div class="row"><button class="btn" data-editplan="${p.id}">编辑</button><button class="btn" data-phase="${p.id}:learn">学习</button><button class="btn" data-phase="${p.id}:practice">做题</button><button class="btn" data-phase="${p.id}:review">复盘</button>${!d?'<button class="btn" data-postone="'+p.id+'">⏭顺延</button>':''}${isFuture&&!d?'<button class="btn primary" data-today="'+p.id+'">📍拉到今日</button>':''}</div></div><button class="btn danger" data-delplan="${p.id}">删</button></div>`}).join(''):'<p class="sub">暂无近期计划。</p>'}
+function planHtml(p){let d=isDonePlan(p);return `<div class="task ${d?'done':''}"><div class="check" data-checkplan="${p.id}" style="cursor:pointer">${d?'✓':''}</div><div><b style="${d?'text-decoration:line-through;opacity:.5':''}">${p.title}</b><br><span class="tag">${p.module}</span><span class="tag blue">${p.hours||0}h</span><span class="tag green">${phaseText(p.phase)}</span>${p.date!==today()?`<span class="tag yellow">${p.date}</span>`:''}<p class="sub">${p.note||''}</p><div class="row"><button class="btn" data-phase="${p.id}:learn">学习</button><button class="btn" data-phase="${p.id}:practice">做题</button><button class="btn" data-phase="${p.id}:review">复盘</button>${!d?'<button class="btn" data-postpone="'+p.id+'">⏭顺延</button>':''}</div></div><button class="btn danger" data-delplan="${p.id}">删</button></div>`}
+function renderPlans(){const list=[...st.plans].sort((a,b)=>a.date.localeCompare(b.date));const hasSel=st._planSel&&st._planSel.size>0;$('#planList').innerHTML=(list.length?`<div class="row" style="margin-bottom:8px;gap:6px">${hasSel?'<button class="btn primary" data-selToday="1">📍所选拉入今日</button><button class="btn danger" data-selDel="1">🗑所选删除</button><button class="btn" data-selClear="1">取消选择</button>':'<span class="sub">勾选左侧方框可多选操作</span>'}</div>`:'')+list.map(p=>{let d=isDonePlan(p);let isToday=p.date===today();let isFuture=p.date>today();let sel=st._planSel&&st._planSel.has(p.id);return `<div class="task ${d?'done':''}"><div class="check ${sel?'sel':''}" data-selplan="${p.id}" style="cursor:pointer">${sel?'✓':''}</div><div><b>${p.date} · ${p.title}</b><br><span class="tag">${p.module}</span><span class="tag blue">${p.hours||0}h</span><span class="tag green">${phaseText(p.phase)}</span>${isToday?'<span class="tag yellow">今日</span>':''}<p class="sub">${p.note||''}</p><div class="row"><button class="btn" data-editplan="${p.id}">编辑</button><button class="btn" data-phase="${p.id}:learn">学习</button><button class="btn" data-phase="${p.id}:practice">做题</button><button class="btn" data-phase="${p.id}:review">复盘</button>${!d?'<button class="btn" data-postpone="'+p.id+'">⏭顺延</button>':''}${isFuture&&!d?'<button class="btn primary" data-today="'+p.id+'">📍拉到今日</button>':''}</div></div><button class="btn danger" data-delplan="${p.id}">删</button></div>`}).join(''):'<p class="sub">暂无近期计划。</p>'}
 function renderCourt(){
  st.courts=st.courts||[];st.leaves=st.leaves||[];
  $('#courtList').innerHTML=st.courts.length?st.courts.sort((a,b)=>a.date.localeCompare(b.date)).map(c=>{const d=diffDays(today(),c.date), kind=c.kind==='work'?'💼 日常工作':'⚖️ 开庭';return `<div class="task"><div>${c.kind==='work'?'💼':'⚖️'}</div><div><b>${c.date} · ${c.title}</b><br><span class="tag">${kind}</span><span class="tag ${d<=2&&d>=0?'yellow':'blue'}">${d===0?'今天':d>0?d+'天后':'已过'}</span><span class="tag">${c.level==='none'?'不调整':c.level==='light'?'前1天轻量':'自动减负'}</span><p class="sub">${c.note||''}</p></div><button class="btn danger" data-delcourt="${c.id}">删</button></div>`}).join(''):'<p class="sub">暂无开庭/工作记录。</p>';
@@ -1091,7 +1096,7 @@ function renderCourses(){
 }
 function courseHtml(m,edit){return `<div class="course"><div><span class="tag">${m.name}</span></div><div><b>${m.teacher} · ${m.course}</b><br><span class="tag blue">${m.hours||0}h</span><span class="tag green">已完成 ${m.done||0}h</span><div class="linkBtns">${m.baidu?`<a href="${m.baidu}" target="_blank">百度网盘</a>`:''}${m.mn?`<a href="${m.mn}" target="_blank">MarginNote</a>`:''}${m.gn?`<a href="${m.gn}" target="_blank">GoodNotes</a>`:''}</div></div>${edit?`<button class="btn" data-editcourse="${m.id}">更换/编辑</button>`:''}</div>`}
 function renderNotes(){ $('#noteLinks').innerHTML=st.modules.map(m=>`<div class="course"><div><span class="tag">${m.name}</span></div><div><b>${m.teacher} · ${m.course}</b><div class="grid2" style="margin-top:5px"><input class="input" data-mn="${m.id}" value="${m.mn||''}" placeholder="MarginNote 3 链接"><input class="input" data-gn="${m.id}" value="${m.gn||''}" placeholder="GoodNotes 链接"></div><div class="linkBtns">${m.mn?`<a href="${m.mn}" target="_blank">开 MN3</a>`:''}${m.gn?`<a href="${m.gn}" target="_blank">开 GoodNotes</a>`:''}</div></div></div>`).join('')}
-function todayPracticeHtml(){ensurePractice();let rows=st.modules.map(m=>({module:m.name,count:+st.practice.daily[m.name]||0,done:(st.practice.logs||[]).find(x=>x.date===today()&&x.module===m.name)})).filter(x=>x.count>0&&!x.done);return rows.length?`<div class="panel" style="margin-top:8px;background:#fff6fb"><b>🧪 今日刷题提醒</b><p class="sub">${rows.map(x=>x.module+x.count+'题').join('；')}</p></div>`:''}
+function todayPracticeHtml(){ensurePractice();let rows=st.modules.map(m=>({module:m.name,count:+st.practice.daily[m.name]||0,done:(st.practice.logs||[]).find(x=>x.date===today()&&x.module===m.name)})).filter(x=>x.count>0&&!x.done);return (rows.length?`<div class="panel" style="margin-top:8px;background:#fff6fb"><b>🧪 今日刷题提醒</b><p class="sub">${rows.map(x=>x.module+x.count+'题').join('；')}</p></div>`:'')+`<div class="panel" style="margin-top:8px"><h3>✍️ 手动记录做题/学习</h3><p class="sub">学完后直接记录时间和题量，无需逐个点完成</p><div class="grid2"><div class="field"><label>模块</label><select id="manualModule" class="input">${st.modules.map(m=>'<option>'+m.name+'</option>').join('')}</select></div><div class="field"><label>做题量</label><input id="manualCount" class="input" type="number" placeholder="如 30" value=""></div></div><div class="grid2"><div class="field"><label>做对量</label><input id="manualCorrect" class="input" type="number" placeholder="如 25" value=""></div><div class="field"><label>学习时长(分钟)</label><input id="manualMinutes" class="input" type="number" placeholder="如 60" value=""></div></div><button class="btn primary full" data-manuallog="1">记录今日做题+时长</button></div>`}
 function renderPractice(){ensurePractice();let box=$('#practicePlanBox');if(!box)return;box.innerHTML=st.modules.map(m=>`<div class="task"><div>🧪</div><div><b>${m.name}</b><p class="sub">每日题量，可按阶段自己调</p></div><input class="input" style="width:72px" type="number" min="0" data-practice-count="${m.name}" value="${+st.practice.daily[m.name]||0}"></div>`).join('');let rows=st.modules.map(m=>({module:m.name,count:+st.practice.daily[m.name]||0,done:(st.practice.logs||[]).find(x=>x.date===today()&&x.module===m.name)})).filter(x=>x.count>0);$('#practiceTodayBox').innerHTML=rows.length?rows.map(x=>`<div class="task ${x.done?'done':''}"><div class="check">✓</div><div><b>${x.module} · ${x.count}题</b><p class="sub">${x.done?'已完成 '+(x.done.correct||0)+'/'+x.count:'建议在粉笔按模块刷题后回这里打卡'}</p></div><button class="btn ${x.done?'green':'primary'}" data-practice-done="${x.module}">${x.done?'完成':'打卡'}</button></div>`).join(''):'<p class="sub">还没有设置每日刷题数量。</p>'}
 function renderWrongs(){ $('#wrongList').innerHTML=st.wrongs.length?st.wrongs.map(w=>`<div class="wrong"><div><span class="tag">${w.module}</span></div><div><b>${w.question}</b><br><span class="tag yellow">${w.reason}</span><span class="tag blue">复盘 ${w.review}</span><p class="sub">${w.note||''}</p></div><button class="btn danger" data-delwrong="${w.id}">删</button></div>`).join(''):'<p class="sub">暂无错题。刷题后把粉笔里的错题要点复制到这里，会自动进入艾宾浩斯复盘。</p>'}
 function cardHtml(c){return `<div class="cardSmall flip" data-flip="${c.id}"><span class="tag">${c.module}</span><b style="display:block;margin-top:6px;font-size:14px">${c.front}</b><div class="answer">${c.back||''}<div class="row" style="margin-top:8px"><button class="btn green" data-pass="${c.id}">已掌握</button><button class="btn" data-again="${c.id}">再来一次</button></div></div></div>`}
@@ -1157,6 +1162,13 @@ function bind(){
   /* Task phases */
   if(t.dataset.phase){let[id,k]=t.dataset.phase.split(':');let p=st.plans.find(x=>x.id===id);p.phase=p.phase||{};p.phase[k]=!p.phase[k];save();renderAll();toast('已更新勾选')}
   if(t.dataset.delplan){st.plans=st.plans.filter(x=>x.id!==t.dataset.delplan);save();renderAll()}
+  /* 今日任务直接勾选完成/取消完成 */
+  if(t.dataset.checkplan){let p=st.plans.find(x=>x.id===t.dataset.checkplan);if(p){p.phase=p.phase||{};let done=p.phase.learn&&p.phase.practice&&p.phase.review;p.phase.learn=!done;p.phase.practice=!done;p.phase.review=!done;save();renderAll();toast(done?'已取消完成':'✓ 已完成')}}
+  /* 近期安排多选操作 */
+  if(t.dataset.selplan){st._planSel=st._planSel||new Set();if(st._planSel.has(t.dataset.selplan))st._planSel.delete(t.dataset.selplan);else st._planSel.add(t.dataset.selplan);renderPlans();return}
+  if(t.dataset.selToday){const cap=+st.dailyTarget||4;let added=0;st._planSel.forEach(id=>{let p=st.plans.find(x=>x.id===id);if(p&&p.date!==today()){const tc=st.plans.filter(x=>x.date===today()&&!isDonePlan(x)).length;if(tc+added>=cap)return;p.date=today();p.note=(p.note||'')+'｜多选拉入今日';added++}});st._planSel.clear();save();renderAll();toast('已拉入 '+added+' 条到今日');return}
+  if(t.dataset.selDel){let n=0;st._planSel.forEach(id=>{st.plans=st.plans.filter(x=>x.id!==id);n++});st._planSel.clear();save();renderAll();toast('已删除 '+n+' 条');return}
+  if(t.dataset.selClear){st._planSel.clear();renderPlans();return}
   if(t.dataset.postpone){postponePlan(t.dataset.postpone)}
   if(t.dataset.postone){postponePlan(t.dataset.postone)}
   if(t.dataset.postponeAll){postponeAllUndone()}
@@ -1171,6 +1183,8 @@ function bind(){
   if(t.dataset.delwrong){st.wrongs=st.wrongs.filter(x=>x.id!==t.dataset.delwrong);save();renderAll()}
   if(t.dataset.delpod){st.pods=st.pods.filter(x=>x.id!==t.dataset.delpod);save();renderAll()}
   if(t.dataset.practiceDone){let count=+st.practice.daily[t.dataset.practiceDone]||0;let correct=prompt('完成多少题做对？可直接填做对数量',count)||count;st.practice.logs=st.practice.logs.filter(x=>!(x.date===today()&&x.module===t.dataset.practiceDone));st.practice.logs.push({id:uid(),date:today(),module:t.dataset.practiceDone,count,correct:+correct||0});save();renderAll();toast('刷题已打卡')}
+  /* 手动记录做题+时长：同时添加刷题记录和专注记录 */
+  if(t.dataset.manuallog){let mod=$('#manualModule')?$('#manualModule').value:st.modules[0].name;let cnt=+($('#manualCount')?.value||0);let cor=+($('#manualCorrect')?.value||0);let min=+($('#manualMinutes')?.value||0);if(!cnt&&!min){toast('请填做题量或学习时长');return}if(cnt>0){st.practice.logs=st.practice.logs.filter(x=>!(x.date===today()&&x.module===mod));st.practice.logs.push({id:uid(),date:today(),module:mod,count:cnt,correct:cor})}if(min>0){st.focus=st.focus||{};st.focus.sessions=st.focus.sessions||[];st.focus.sessions.push({id:uid(),date:today(),module:mod,minutes:min,label:'手动记录'})}if(cnt>0){let m=st.modules.find(x=>x.name===mod);if(m)m.done=(+m.done||0)+min/60}['manualCount','manualCorrect','manualMinutes'].forEach(id=>{let el=$('#'+id);if(el)el.value=''});save();renderAll();toast('✓ 已记录 '+mod+(cnt>0?'：'+cnt+'题':'')+(min>0?' +'+min+'分钟':''))}
   if(t.dataset.delfocus){st.focus.sessions=st.focus.sessions.filter(x=>x.id!==t.dataset.delfocus);save();renderAll()}
   if(t.dataset.focusMode){st.focus.mode=t.dataset.focusMode;save();renderFocus()}
   if(t.dataset.flip){t.classList.toggle('show')}
@@ -1267,10 +1281,12 @@ function importPlanExcel(file){
   const rows=XLSX.utils.sheet_to_json(sh,{defval:''});
   const plans=rows.map(r=>({id:uid(),date:normDate(cell(r,['日期','date','Date','时间'])),module:cell(r,['模块','科目','module'])||st.modules[0].name,title:cell(r,['标题','任务','内容','计划','title'])||'Excel导入任务',hours:+cell(r,['时长','小时','hours','h'])||1,note:cell(r,['备注','说明','note'])||'Excel同步导入',phase:{learn:false,practice:false,review:false},source:'excel'})).filter(p=>p.title);
   if(!plans.length){toast('没有识别到计划行');return}
-  const dates=[...new Set(plans.map(p=>p.date))];
-  st.plans=st.plans.filter(p=>!(p.source==='excel'&&dates.includes(p.date)));
+  /* 增量合并：只删除完全相同的重复项（同日期+同标题+同模块），保留原有所有数据 */
+  plans.forEach(np=>{
+    st.plans=st.plans.filter(op=>!(op.date===np.date&&op.title===np.title&&op.module===np.module));
+  });
   st.plans.push(...plans);
-  autoDailyRefresh();save();renderAll();toast('已同步 '+plans.length+' 条近期安排');
+  autoDailyRefresh();save();renderAll();toast('已增量同步 '+plans.length+' 条，原有数据已保留');
  };
  reader.readAsArrayBuffer(file);
 }
